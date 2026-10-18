@@ -1,0 +1,201 @@
+# .clinerules — Full Ruleset
+# Place in project root (or split into .clinerules/01-*.md files). Adjust the PROJECT section at the bottom.
+
+## 0. How to Use These Rules
+- Priority order when rules conflict: (1) explicit user instruction in the current task, (2) safety/security rules, (3) project conventions already in the repo, (4) this file.
+- If a user instruction conflicts with safety or data-integrity rules, say so and propose a safer alternative before proceeding.
+- Never claim something works, passes, or is deployed unless it was actually run or verified. State what was NOT verified.
+
+## 1. Workflow: Explore → Plan → Implement → Verify → Report
+1. Explore: read relevant files, imports, types, tests, configs, and recent git history. Search by symbol before assuming. Never invent APIs, flags, file paths, or package versions.
+2. Plan: for anything non-trivial, write a short plan (goal, files, order, risks, verification). Ask ONE focused question only if blocked or if the action is risky or irreversible.
+3. Implement: smallest correct change, in small steps, following existing patterns.
+4. Verify: run type-check, lint, tests, and build as defined by the project. Fix what you broke.
+5. Report: summarize what changed, which files, how it was verified, what remains, and any risks or assumptions.
+
+## 2. Large Code & Large Changes (applies if a change > ~500 characters, a file > ~500 lines, or 3+ files are touched)
+### 2.1 Plan before editing
+- List files to touch, the order, and the verification step for each stage.
+- Get confirmation before: public API changes, DB schema changes, dependency upgrades, large refactors, deletions.
+
+### 2.2 Edit surgically
+- Use targeted search/replace or diff edits. Do NOT regenerate an entire file to change a few lines.
+- In files over ~500 lines, read only the needed ranges (by function/class name), and edit only those blocks.
+- NEVER write placeholders such as "// ... existing code ...", "# rest unchanged", or "TODO: implement" in place of real code that exists or was requested.
+- After several edits in the same file, re-read the region before the next edit (line numbers and context shift).
+- Preserve unrelated code, comments, formatting, and whitespace. No mass reformatting inside a feature change.
+
+### 2.3 Split big things into small things
+- Files > ~500 lines: propose a split by responsibility (components / hooks / services / repositories / utils / types / constants).
+- Functions < ~40 lines, one responsibility. React components < ~200 lines. Classes with one reason to change.
+- Do refactors/moves as a separate step from behavior changes so each diff is reviewable.
+- After moving code: update imports/exports, grep for old paths and symbols, run type-check.
+
+### 2.4 Keep the project green
+- One logical change → verify → next change. Never leave the build broken between steps.
+- Each step should be committable with a clear conventional message.
+
+### 2.5 Long outputs
+- If output would be too long, deliver in parts (per file or per section), state what is done and what remains.
+- Never silently skip part of a requested change. List anything deferred explicitly.
+
+## 3. Context & Memory Management
+- Prefer reading specific files/ranges over dumping whole directories. Use grep/search to locate code.
+- Summarize findings before moving on so context stays small and decisions are explicit.
+- For multi-session or long tasks, keep a short progress note (e.g., docs/progress.md or a task checklist) with: done, in progress, next, open questions.
+- Don't re-read unchanged files repeatedly; don't paste huge logs, show the relevant lines only.
+
+## 4. Code Quality (all languages)
+- Names express intent; avoid abbreviations and generic names (`data`, `tmp`, `handle`).
+- Comments explain WHY, not WHAT. Delete dead code and commented-out blocks.
+- Early returns, flat control flow, max ~3 nesting levels. Prefer pure functions and immutability.
+- No magic numbers/strings → constants/enums/config.
+- DRY with judgment: extract on the 3rd duplication, avoid premature abstraction.
+- Explicit error handling: never swallow exceptions; return or throw typed, meaningful errors; add context to messages without leaking secrets.
+- Validate all external input at the boundary (HTTP, queue messages, env vars, files, webhooks, LLM output).
+- Prefer composition over inheritance. Depend on interfaces, inject dependencies.
+- Keep functions side-effect-light; isolate I/O at the edges.
+- Don't add dependencies for trivial tasks. If adding one, state why, check maintenance/license/size, and pin the version.
+
+## 5. TypeScript / JavaScript
+- `strict: true`. No `any` (use `unknown` + narrowing, generics, or proper types). No `@ts-ignore`/`@ts-expect-error` without a justifying comment.
+- Prefer `type` imports, discriminated unions, `satisfies`, readonly where possible, exhaustive `switch` checks.
+- Validate at boundaries with Zod (or class-validator in NestJS) and infer types from schemas.
+- `async/await` everywhere; no floating promises; use `Promise.all` for independent work; handle rejections.
+- Avoid mutation of function arguments; avoid global state; avoid deep prop drilling (use context or state libs sparingly).
+- Use the repo's ESLint/Prettier config. Don't modify lint/format/tsconfig rules without asking.
+
+### 5.1 React / Next.js
+- Function components + hooks. Keep components focused; extract custom hooks for logic; colocate small helpers.
+- Next.js App Router: default to Server Components; add "use client" only where needed; fetch data on the server; use route handlers/server actions with validation and auth checks.
+- Avoid unnecessary useEffect (derive state, use event handlers, use data-fetching libs). Always include correct dependency arrays.
+- Accessibility: semantic HTML, labels, keyboard navigation, alt text, sufficient contrast, focus management.
+- Performance: lazy-load heavy components, use next/image, avoid large client bundles, memoize only after measuring.
+- Handle loading, empty, and error states for every async UI.
+- Styling: follow the project's system (Tailwind/CSS modules). No inline style sprawl; use design tokens.
+
+### 5.2 Node / Express / NestJS
+- Thin controllers/routes, business logic in services, data access in repositories. DTOs for input/output. Guards/middleware for auth.
+- Centralized error handling, request validation, structured logging with request IDs.
+- Graceful shutdown, timeouts and retries (with backoff and jitter) for outbound calls, idempotency for retried operations.
+- Don't block the event loop; offload heavy work to queues/workers.
+
+## 6. Python (Django / FastAPI)
+- PEP 8, type hints on public functions, docstrings for non-obvious behavior; follow ruff/black/mypy config if present.
+- Use virtual envs/uv and pinned dependencies. Don't install packages globally.
+- Django:
+  - Thin views, logic in services/models/managers. Use forms/serializers for validation.
+  - Avoid N+1: `select_related` / `prefetch_related`; use `only()`/`values()` for large reads; paginate.
+  - Migrations: never edit applied migrations; one migration per logical change; review generated SQL; make them reversible; avoid long locks on big tables.
+  - Bulk data corrections: write idempotent management commands, support `--dry-run`, log counts, use transactions and batching (`iterator()`, `bulk_update`), back up/verify before running on production.
+  - Use settings per environment; never hardcode secrets; use `get_object_or_404`, proper permissions and CSRF.
+- FastAPI: Pydantic models for I/O, dependency injection for auth/DB/session, async only for truly async I/O, explicit response models and status codes.
+- Tests with pytest (pytest-django where applicable), factories/fixtures over ad-hoc data.
+
+## 7. API Design
+- Consistent resource naming, correct HTTP verbs/status codes, stable error format (code, message, details, request id).
+- Version public APIs; never break contracts silently; deprecate with notice.
+- Pagination, filtering, sorting on list endpoints; enforce max page sizes.
+- Idempotency keys for payment/create-like operations; rate limiting on public endpoints.
+- Document with OpenAPI/Swagger and keep it in sync with code.
+
+## 8. Database & Data Safety
+- NEVER run destructive operations (DROP, TRUNCATE, `migrate reset`, `prisma db push --force`, mass DELETE/UPDATE) without explicit confirmation and a backup/rollback plan.
+- Backward-compatible schema changes: add → backfill → switch reads/writes → remove.
+- Index for frequent filters/joins/foreign keys; verify with EXPLAIN on heavy queries.
+- Transactions for multi-step writes; make background jobs idempotent and retry-safe.
+- Use parameterized queries/ORM only. No string-built SQL.
+- Never use production data in dev/test without anonymization.
+
+## 9. Security (non-negotiable)
+- No secrets in code, logs, commits, or examples. Use env vars / secret managers. Keep `.env*` out of git; maintain `.env.example` with placeholders.
+- AuthN/AuthZ checked server-side on every protected route and object (prevent IDOR). Least privilege, RBAC.
+- Passwords: argon2/bcrypt. JWT: short-lived access tokens, refresh rotation, verify signature/issuer/audience/expiry; prefer httpOnly secure cookies for browser sessions.
+- Prevent XSS (escape/sanitize output, CSP), CSRF, SSRF (allowlist outbound hosts), injection, path traversal, open redirects, mass assignment.
+- Validate and limit file uploads (type, size, content sniffing), store outside web root, scan if possible.
+- Don't log PII, tokens, passwords, or full payment data. Redact in error reports.
+- CORS: explicit origins only. Security headers enabled (HSTS, X-Content-Type-Options, frame protections).
+- Webhooks: verify signatures, handle replays, respond fast and process async.
+- Keep dependencies updated; flag known vulnerabilities (npm audit / pip-audit) and don't ignore them silently.
+
+## 10. Testing
+- Every behavior change gets a test. Bug fix = reproduce with a failing test first, then fix.
+- Test behavior, not implementation details. Cover happy path, edge cases, error paths, permissions.
+- Fast, deterministic, isolated tests. Mock only external boundaries (network, time, payments, LLM calls).
+- Pyramid: many unit tests, fewer integration tests, few end-to-end tests for critical flows.
+- Don't delete or weaken a failing test to make it pass; fix the cause or explain why the test is wrong.
+- Before declaring done, run the project's full check: type-check → lint → tests → build.
+
+## 11. Observability & Error Handling
+- Structured logs (JSON) with level, request/correlation ID, user/tenant ID (non-PII), and context.
+- Log at the right level; no noisy debug logs in production paths; never log secrets.
+- Add health/readiness endpoints, metrics for latency/error rate/queue depth, and alerts on user-impacting failures.
+- Return user-safe error messages; keep stack traces server-side.
+
+## 12. Performance
+- Measure before optimizing (profiler, EXPLAIN, Lighthouse, load tests). Fix algorithms and queries before micro-optimizations.
+- Cache deliberately with clear TTL and invalidation. Avoid caching user-specific data in shared caches.
+- Batch and paginate. Avoid unbounded queries, loops with I/O, and loading big files into memory (stream instead).
+- Frontend: minimize JS, code-split, optimize images/fonts, avoid layout shift.
+
+## 13. Git & Collaboration
+- Work on feature branches; never commit directly to main/production.
+- Conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `perf:`, `ci:`). Small, focused commits.
+- Don't commit secrets, build artifacts, large binaries, or generated files that aren't tracked by convention.
+- NEVER `git push --force`, `git reset --hard`, `git clean -fd`, or delete branches/tags without explicit approval.
+- Keep PRs small and reviewable; include summary, testing notes, screenshots for UI, and migration/rollback notes.
+- Run pre-commit hooks; don't bypass them with `--no-verify`.
+
+## 14. DevOps, Cloud & Infrastructure as Code
+- Always show the plan/diff first (`terraform plan`, `cdk diff`, `kubectl diff`). NEVER apply/deploy to production without explicit confirmation. Prefer staging first.
+- Docker: pinned base images, multi-stage builds, non-root user, `.dockerignore`, minimal layers, health checks.
+- Separate config per environment (dev/staging/prod) via env vars/parameters; no environment-specific hardcoding.
+- AWS: least-privilege IAM, no wildcard permissions without justification, encryption at rest/in transit, private subnets for data stores, tagging, cost awareness, budgets/alarms. Prefer managed services where sensible (ECS/App Runner/RDS/SQS/SNS).
+- CI/CD: lint, type-check, test, build, security scan on every PR; deploy from the pipeline, not from laptops; keep rollbacks simple.
+- Secrets in Secrets Manager/Parameter Store or CI secrets, never in repo or images.
+
+## 15. AI / LLM Features (LangChain, RAG, agents, chatbots)
+- Treat LLM output as untrusted input: validate with schemas, escape before rendering, never execute it directly.
+- Guard against prompt injection: separate system/user/retrieved content, don't give the model tools or permissions beyond need, require confirmation for destructive tool actions.
+- Set timeouts, retries with backoff, max tokens, and cost/usage limits. Handle provider failures and rate limits (and free-model instability) with fallbacks.
+- Keep API keys server-side only. Log prompts/responses carefully with PII redaction.
+- Version prompts; keep them in files/config, not scattered strings. Add evals/regression tests with fixed examples for critical behaviors.
+- RAG: chunk deliberately, store source metadata, cite sources, and handle "no relevant context" without hallucinating.
+- Make model name/provider configurable via env so it can be swapped without code changes.
+
+## 16. Documentation
+- Update README, `.env.example`, API docs, and setup/run instructions whenever behavior or configuration changes.
+- Record non-obvious decisions in short ADR-style notes (context, decision, consequences).
+- Public functions/modules: concise docstrings/JSDoc with inputs, outputs, errors.
+
+## 17. Commands & Tool Safety
+- Explore with read-only commands first (`ls`, `grep`, `git status`, `git diff`, `git log`).
+- Require explicit approval before: deleting files/directories, overwriting uncommitted work, running migrations on non-local DBs, deploying, publishing packages, force operations, or touching production resources.
+- Check whether a dev server/process is already running before starting another. Don't leave stray background processes.
+- Don't run unknown scripts from the internet; inspect first. Install dependencies only when needed and say which and why.
+- Prefer project scripts (`npm run`, `uv run`, `make`) over ad-hoc commands.
+
+## 18. Definition of Done
+- [ ] Requirement met and edge cases handled
+- [ ] Type-check, lint, tests, and build pass (or failures are explained)
+- [ ] New/changed behavior covered by tests
+- [ ] No secrets, debug code, dead code, or stray TODOs added
+- [ ] Docs/config/.env.example updated where relevant
+- [ ] Migrations/IaC reviewed and reversible; no unconfirmed destructive actions
+- [ ] Summary delivered: what changed, how verified, risks, follow-ups
+
+## 19. Communication Style
+- Be concise and direct; lead with the outcome or the blocker.
+- When offering options, recommend one and give the trade-off in one or two lines.
+- State assumptions explicitly. If asked for something unwise, say so briefly and offer a better path instead of silently complying or silently deviating.
+- Don't apologize repeatedly or pad answers. Don't over-explain code the user clearly understands.
+
+## 20. PROJECT-SPECIFIC (edit per repo)
+- Stack: <e.g., Django + uv + ruff + mypy + pytest-django + pre-commit | Next.js + TypeScript + Prisma + PostgreSQL>
+- Install: <command>
+- Dev server: <command>
+- Test: <command>   Lint: <command>   Type-check: <command>   Build: <command>
+- Layout: <e.g., src/<package>/, apps/, deploy/cdk/ (prod & staging configs)>
+- Environments: local → staging → production. Staging first for risky changes; production only with explicit approval.
+- Do-not-touch: <generated files, vendored code, applied migrations, lockfiles unless asked>
+- Conventions: <naming, folder rules, branching, PR template>
